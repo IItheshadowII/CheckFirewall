@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Security, status
+from fastapi import FastAPI, Depends, HTTPException, Security, status, Response
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -141,3 +141,14 @@ async def receive_heartbeat(payload: schemas.HeartbeatPayload, db: AsyncSession 
 async def list_hosts(db: AsyncSession = Depends(database.get_db)):
     result = await db.execute(select(models.Host).order_by(models.Host.hostname))
     return result.scalars().all()
+
+
+@app.delete("/api/hosts/{host_id}", status_code=204, dependencies=[Depends(get_api_key)])
+async def delete_host(host_id: int, db: AsyncSession = Depends(database.get_db)):
+    result = await db.execute(select(models.Host).where(models.Host.id == host_id))
+    host = result.scalars().first()
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
+    await db.delete(host)
+    await db.commit()
+    return Response(status_code=204)
