@@ -1,0 +1,28 @@
+# version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: firewall_monitor_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+    env_file:
+      - ./backend/.env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/monitor.db
+
+  frontend:
+    build: ./frontend
+    container_name: firewall_monitor_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+networks:
+  default:
+    driver: bridge
