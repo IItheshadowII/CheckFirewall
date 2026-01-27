@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Security, status, Response
+from fastapi import FastAPI, Depends, HTTPException, Security, status, Response, WebSocket, WebSocketDisconnect, Request
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,35 @@ from sqlalchemy.future import select
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import models, schemas, database, config, utils
+from fastapi.encoders import jsonable_encoder
+import asyncio
+
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        data = jsonable_encoder(message)
+        to_remove = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(data)
+            except Exception:
+                to_remove.append(connection)
+        for c in to_remove:
+            self.disconnect(c)
+
+
+manager = ConnectionManager()
 
 # --- Security ---
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
@@ -69,6 +98,12 @@ async def check_hosts_status():
             db.add(host)
 
         await db.commit()
+        # Broadcast updated hosts if their alerting state changed
+        for host in silent_hosts + risky_hosts:
+            try:
+                await manager.broadcast({"action": "upsert", "host": jsonable_encoder(host)})
+            except Exception:
+                pass
 
 # --- Jobs & Lifespan ---
 scheduler = AsyncIOScheduler()
@@ -101,14 +136,20 @@ app.add_middleware(
 # --- Routes ---
 
 @app.post("/api/heartbeat", response_model=schemas.HostResponse, dependencies=[Depends(get_api_key)])
-async def receive_heartbeat(payload: schemas.HeartbeatPayload, db: AsyncSession = Depends(database.get_db)):
+async def receive_heartbeat(payload: schemas.HeartbeatPayload, request: Request, db: AsyncSession = Depends(database.get_db)):
     result = await db.execute(select(models.Host).where(models.Host.hostname == payload.hostname))
     host = result.scalars().first()
     
     if not host:
+        # Use payload ip_address if provided, otherwise fallback to request client IP
+        host_ip = None
+        if getattr(payload, 'ip_address', None):
+            host_ip = payload.ip_address
+        elif request and request.client:
+            host_ip = request.client.host
         host = models.Host(
             hostname=payload.hostname,
-            ip_address=payload.ip_address,
+            ip_address=host_ip,
             firewall_status=payload.firewall_status,
             profiles_status=payload.profiles_status,
             is_alerting=False # Reset alert status on new host
@@ -119,7 +160,11 @@ async def receive_heartbeat(payload: schemas.HeartbeatPayload, db: AsyncSession 
         if not host.firewall_status and payload.firewall_status:
            host.is_alerting = False
            
-        host.ip_address = payload.ip_address
+        # Update ip_address if provided in payload, otherwise override if currently empty or 'Unknown'
+        if getattr(payload, 'ip_address', None):
+            host.ip_address = payload.ip_address
+        elif request and request.client and (not host.ip_address or host.ip_address == 'Unknown'):
+            host.ip_address = request.client.host
         host.firewall_status = payload.firewall_status
         host.profiles_status = payload.profiles_status
         host.last_seen = datetime.utcnow()
@@ -135,6 +180,11 @@ async def receive_heartbeat(payload: schemas.HeartbeatPayload, db: AsyncSession 
         
     await db.commit()
     await db.refresh(host)
+    # Notify websocket clients about new or updated host
+    try:
+        await manager.broadcast({"action": "upsert", "host": jsonable_encoder(host)})
+    except Exception:
+        pass
     return host
 
 @app.get("/api/hosts", response_model=List[schemas.HostResponse])
@@ -151,4 +201,22 @@ async def delete_host(host_id: int, db: AsyncSession = Depends(database.get_db))
         raise HTTPException(status_code=404, detail="Host not found")
     await db.delete(host)
     await db.commit()
+    # Notify websocket clients that host was deleted
+    try:
+        await manager.broadcast({"action": "delete", "host": {"id": host_id}})
+    except Exception:
+        pass
     return Response(status_code=204)
+
+
+@app.websocket("/ws/hosts")
+async def websocket_hosts(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection open; clients are not required to send messages.
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
+        manager.disconnect(websocket)
