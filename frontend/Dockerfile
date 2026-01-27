@@ -2,7 +2,9 @@
 FROM node:18-alpine as build-stage
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+# Ensure devDependencies (like vite) are installed during the build
+ENV NPM_CONFIG_PRODUCTION=false
+RUN npm ci --prefer-offline --no-audit
 COPY . .
 RUN npm run build
 
