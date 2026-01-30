@@ -10,7 +10,9 @@ const updatedSecondsAgo = ref(0)
 let refreshInterval = null
 let timerInterval = null
 
-const API_URL = import.meta.env.VITE_API_URL || ''
+// Use the same default as in main.js so WS goes to the backend even
+// if VITE_API_URL is not set at build time.
+const API_URL = import.meta.env.VITE_API_URL || 'https://monitor-firewallmonitor.koswui.easypanel.host'
 
 const fetchHosts = async () => {
   try {
