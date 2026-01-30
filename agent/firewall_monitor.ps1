@@ -4,7 +4,7 @@
 # If any active profile is disabled, it reports a "Risk" status (firewall_status = $false).
 
 param (
-    [string]$ServerUrl = "http://localhost:8000/api/heartbeat",
+    [string]$ServerUrl = "https://monitor-firewallmonitor.koswui.easypanel.host/api/heartbeat",
     [string]$ApiKey = "change-me-please",
     [string]$Hostname = $env:COMPUTERNAME
 )

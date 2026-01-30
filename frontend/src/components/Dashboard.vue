@@ -10,6 +10,8 @@ const updatedSecondsAgo = ref(0)
 let refreshInterval = null
 let timerInterval = null
 
+const API_URL = import.meta.env.VITE_API_URL || ''
+
 const fetchHosts = async () => {
   try {
     const res = await axios.get('/api/hosts', { headers: { 'X-API-KEY': 'change-me-please' } })
@@ -59,9 +61,21 @@ const handleWsMessage = (event) => {
 }
 
 const connectWS = () => {
-  const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-  const url = `${scheme}://${location.host}/ws/hosts`
-  ws = new WebSocket(url)
+  try {
+    if (API_URL) {
+      const u = new URL(API_URL)
+      const wsScheme = u.protocol === 'https:' ? 'wss' : 'ws'
+      const wsUrl = `${wsScheme}://${u.host}/ws/hosts`
+      ws = new WebSocket(wsUrl)
+    } else {
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
+      const url = `${scheme}://${location.host}/ws/hosts`
+      ws = new WebSocket(url)
+    }
+  } catch (e) {
+    console.error('connectWS error', e)
+    return
+  }
   ws.onopen = () => {
     console.debug('WS connected')
     if (reconnectTimeout) { clearTimeout(reconnectTimeout); reconnectTimeout = null }

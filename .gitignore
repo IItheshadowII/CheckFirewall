@@ -1,0 +1,11 @@
+# Ignore environment files for frontend
+frontend/.env
+
+# Node modules and build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Python artifacts
+__pycache__/
+.venv/
