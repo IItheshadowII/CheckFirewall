@@ -18,9 +18,12 @@ if (!API_URL) {
   API_URL = `${protocol}//${hostname}:8000`
 }
 
+// API key: prefer VITE_API_KEY from env, fall back to default
+const API_KEY = import.meta.env.VITE_API_KEY || 'change-me-please'
+
 const fetchHosts = async () => {
   try {
-    const res = await axios.get('/api/hosts', { headers: { 'X-API-KEY': 'change-me-please' } })
+    const res = await axios.get('/api/hosts', { headers: { 'X-API-KEY': API_KEY } })
     hosts.value = res.data || []
     updatedSecondsAgo.value = 0
   } catch (e) {
@@ -110,7 +113,7 @@ onUnmounted(() => {
 const deleteHost = async (id) => {
   if (!confirm('Eliminar agente permanentemente?')) return
   try {
-    const res = await axios.delete(`/api/hosts/${id}`, { headers: { 'X-API-KEY': 'change-me-please' } })
+    const res = await axios.delete(`/api/hosts/${id}`, { headers: { 'X-API-KEY': API_KEY } })
     if (res.status === 200 || res.status === 204) {
       hosts.value = hosts.value.filter(h => h.id !== id)
     } else {
