@@ -14,3 +14,8 @@ class HostResponse(HeartbeatPayload):
 
     class Config:
         from_attributes = True
+
+
+class SettingsResponse(BaseModel):
+    alert_timeout_minutes: int
+    alert_recipient_email: str

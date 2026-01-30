@@ -135,6 +135,13 @@ app.add_middleware(
 
 # --- Routes ---
 
+@app.get("/api/settings", response_model=schemas.SettingsResponse)
+async def get_settings():
+    return schemas.SettingsResponse(
+        alert_timeout_minutes=config.settings.ALERT_TIMEOUT_MINUTES,
+        alert_recipient_email=config.settings.ALERT_RECIPIENT_EMAIL,
+    )
+
 @app.post("/api/heartbeat", response_model=schemas.HostResponse, dependencies=[Depends(get_api_key)])
 async def receive_heartbeat(payload: schemas.HeartbeatPayload, request: Request, db: AsyncSession = Depends(database.get_db)):
     result = await db.execute(select(models.Host).where(models.Host.hostname == payload.hostname))

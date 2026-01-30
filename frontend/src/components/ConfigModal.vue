@@ -1,19 +1,17 @@
 <script setup>
-import { ref } from 'vue'
-
 const props = defineProps({
-  isOpen: Boolean
+  isOpen: Boolean,
+  threshold: {
+    type: Number,
+    default: 5,
+  },
+  email: {
+    type: String,
+    default: 'admin@example.com',
+  },
 })
 
-const emit = defineEmits(['close', 'save'])
-
-const threshold = ref(5)
-const email = ref('admin@example.com')
-
-const save = () => {
-    emit('save', { threshold: threshold.value, email: email.value })
-    emit('close')
-}
+const emit = defineEmits(['close'])
 </script>
 
 <template>
@@ -26,19 +24,19 @@ const save = () => {
       <div class="p-6 space-y-4">
         <div>
           <label class="block text-sm font-medium text-gray-400 mb-1">Alert Threshold (Minutes)</label>
-          <input v-model="threshold" type="number" min="1" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all" />
-          <p class="text-xs text-gray-500 mt-1">Send alert if host is silent for more than this time.</p>
+          <input :value="threshold" type="number" min="1" readonly class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-300 opacity-80 cursor-not-allowed" />
+          <p class="text-xs text-gray-500 mt-1">Configured on the server (ALERT_TIMEOUT_MINUTES).</p>
         </div>
         
         <div>
            <label class="block text-sm font-medium text-gray-400 mb-1">Alert Recipient Email</label>
-           <input v-model="email" type="email" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all" />
+           <input :value="email" type="email" readonly class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-300 opacity-80 cursor-not-allowed" />
+           <p class="text-xs text-gray-500 mt-1">Configured on the server (ALERT_RECIPIENT_EMAIL).</p>
         </div>
       </div>
       
       <div class="px-6 py-4 bg-gray-900/50 border-t border-gray-700 flex justify-end gap-3">
-        <button @click="$emit('close')" class="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors">Cancel</button>
-        <button @click="save" class="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all">Save Changes</button>
+        <button @click="$emit('close')" class="px-4 py-2 text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-lg shadow-indigo-500/20 transition-all">Close</button>
       </div>
     </div>
   </div>

@@ -1,9 +1,28 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
 import Dashboard from './components/Dashboard.vue'
 import ConfigModal from './components/ConfigModal.vue'
 
 const isConfigOpen = ref(false)
+const alertThreshold = ref(5)
+const alertEmail = ref('admin@example.com')
+
+onMounted(async () => {
+  try {
+    const res = await axios.get('/api/settings')
+    if (res?.data) {
+      if (typeof res.data.alert_timeout_minutes === 'number') {
+        alertThreshold.value = res.data.alert_timeout_minutes
+      }
+      if (typeof res.data.alert_recipient_email === 'string') {
+        alertEmail.value = res.data.alert_recipient_email
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load settings from backend', e)
+  }
+})
 </script>
 
 <template>
@@ -30,7 +49,12 @@ const isConfigOpen = ref(false)
 
     <main class="container mx-auto px-4 py-8">
       <Dashboard />
-      <ConfigModal :isOpen="isConfigOpen" @close="isConfigOpen = false" />
+      <ConfigModal
+        :isOpen="isConfigOpen"
+        :threshold="alertThreshold"
+        :email="alertEmail"
+        @close="isConfigOpen = false"
+      />
     </main>
   </div>
 </template>
