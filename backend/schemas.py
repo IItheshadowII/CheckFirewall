@@ -11,6 +11,8 @@ class HeartbeatPayload(BaseModel):
 class HostResponse(HeartbeatPayload):
     id: int
     last_seen: datetime
+    is_alerting: bool | None = False
+    is_acknowledged: bool | None = False
 
     class Config:
         from_attributes = True
@@ -19,3 +21,7 @@ class HostResponse(HeartbeatPayload):
 class SettingsResponse(BaseModel):
     alert_timeout_minutes: int
     alert_recipient_email: str
+
+
+class HostAckPayload(BaseModel):
+    acknowledged: bool = True

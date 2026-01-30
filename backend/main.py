@@ -50,56 +50,58 @@ async def get_api_key(api_key_header: str = Security(api_key_header)):
         status_code=status.HTTP_403_FORBIDDEN, detail="Could not validate credentials"
     )
 
+async def _collect_alert_hosts(db: AsyncSession, include_already_alerting: bool = False):
+    """Return hosts that should trigger an alert.
+
+    - Silent: last_seen older than threshold
+    - Risky: firewall_status == False
+    - Skip acknowledged hosts
+    - Optionally skip hosts we already alerted on (is_alerting=True)
+    """
+
+    threshold = datetime.utcnow() - timedelta(minutes=config.settings.ALERT_TIMEOUT_MINUTES)
+
+    base_filters = [models.Host.is_acknowledged == False]
+    if not include_already_alerting:
+        base_filters.append(models.Host.is_alerting == False)
+
+    query_silent = select(models.Host).where(
+        models.Host.last_seen < threshold,
+        *base_filters,
+    )
+    result_silent = await db.execute(query_silent)
+    silent_hosts = result_silent.scalars().all()
+
+    query_risky = select(models.Host).where(
+        models.Host.firewall_status == False,
+        *base_filters,
+    )
+    result_risky = await db.execute(query_risky)
+    risky_hosts = result_risky.scalars().all()
+
+    unique = {h.id: h for h in silent_hosts + risky_hosts}
+    return list(unique.values())
+
+
 # --- Background Task ---
 async def check_hosts_status():
     async with database.SessionLocal() as db:
-        threshold = datetime.utcnow() - timedelta(minutes=config.settings.ALERT_TIMEOUT_MINUTES)
-        
-        # logic: Find hosts that are down (firewall_status=False) OR haven't been seen in X minutes
-        # For simplicity, we trust the agent's report of "firewall_status".
-        # We also alert if the agent hasn't checked in.
-        
-        # 1. Check for silent agents
-        query_silent = select(models.Host).where(
-            models.Host.last_seen < threshold,
-            models.Host.is_alerting == False 
-        )
-        result_silent = await db.execute(query_silent)
-        silent_hosts = result_silent.scalars().all()
-        
-        for host in silent_hosts:
-            print(f"Host {host.hostname} is silent!")
-            await utils.send_alert_email(host.hostname, host.ip_address, str(host.last_seen))
-            host.is_alerting = True # Prevent spam
-            db.add(host)
-            
-        # 2. Check for reported risks (already handled by agent sending heartbeat, but maybe we want repeated alerts?)
-        # Let's say if it stays risky for too long.
-        # For now, let's stick to the requirement: "Si el estado es False (Inactivo) por más de X minutos"
-        # This implies we need to track *when* it went false. 
-        # But simplify: If status is False and we haven't alerted yet.
-        
-        query_risky = select(models.Host).where(
-            models.Host.firewall_status == False,
-            models.Host.is_alerting == False
-        )
-        result_risky = await db.execute(query_risky)
-        risky_hosts = result_risky.scalars().all()
-        
-        for host in risky_hosts:
-             # Check if it has been risky for more than X minutes? 
-             # The requirement says "Si el estado es False ... por más de X minutos".
-             # Since we update last_seen on every heartbeat, if it keeps sending False, it means it is risky.
-             # We should probably alert immediately or after a grace period. 
-             # Let's alert immediately if it reports False.
-            print(f"Host {host.hostname} reported risk!")
-            await utils.send_alert_email(host.hostname, host.ip_address, str(host.last_seen))
+        alert_hosts = await _collect_alert_hosts(db, include_already_alerting=False)
+        if not alert_hosts:
+            return
+
+        print(f"Found {len(alert_hosts)} host(s) requiring alert")
+        await utils.send_alert_email(alert_hosts, manual=False)
+
+        # Mark them as alerted to avoid spam
+        for host in alert_hosts:
             host.is_alerting = True
             db.add(host)
 
         await db.commit()
+
         # Broadcast updated hosts if their alerting state changed
-        for host in silent_hosts + risky_hosts:
+        for host in alert_hosts:
             try:
                 await manager.broadcast({"action": "upsert", "host": jsonable_encoder(host)})
             except Exception:
@@ -198,6 +200,39 @@ async def receive_heartbeat(payload: schemas.HeartbeatPayload, request: Request,
 async def list_hosts(db: AsyncSession = Depends(database.get_db)):
     result = await db.execute(select(models.Host).order_by(models.Host.hostname))
     return result.scalars().all()
+
+
+@app.post("/api/hosts/{host_id}/ack", status_code=204, dependencies=[Depends(get_api_key)])
+async def set_host_acknowledged(host_id: int, payload: schemas.HostAckPayload, db: AsyncSession = Depends(database.get_db)):
+    result = await db.execute(select(models.Host).where(models.Host.id == host_id))
+    host = result.scalars().first()
+    if not host:
+        raise HTTPException(status_code=404, detail="Host not found")
+
+    host.is_acknowledged = payload.acknowledged
+    # If user acknowledges, we also clear is_alerting to avoid confusing state
+    if host.is_acknowledged:
+        host.is_alerting = False
+    db.add(host)
+    await db.commit()
+    await db.refresh(host)
+
+    try:
+        await manager.broadcast({"action": "upsert", "host": jsonable_encoder(host)})
+    except Exception:
+        pass
+
+    return Response(status_code=204)
+
+
+@app.post("/api/alerts/send", dependencies=[Depends(get_api_key)])
+async def send_manual_alerts(db: AsyncSession = Depends(database.get_db)):
+    alert_hosts = await _collect_alert_hosts(db, include_already_alerting=True)
+    if not alert_hosts:
+        return {"sent": False, "count": 0}
+
+    await utils.send_alert_email(alert_hosts, manual=True)
+    return {"sent": True, "count": len(alert_hosts)}
 
 
 @app.delete("/api/hosts/{host_id}", status_code=204, dependencies=[Depends(get_api_key)])

@@ -124,6 +124,29 @@ const deleteHost = async (id) => {
   }
 }
 
+const toggleKnown = async (host) => {
+  const target = !host.is_acknowledged
+  try {
+    await axios.post(`/api/hosts/${host.id}/ack`, { acknowledged: target }, { headers: { 'X-API-KEY': API_KEY } })
+    host.is_acknowledged = target
+  } catch (e) {
+    alert('Error al actualizar estado conocido: ' + (e?.response?.data?.detail || e.message))
+  }
+}
+
+const sendManualAlerts = async () => {
+  try {
+    const res = await axios.post('/api/alerts/send', null, { headers: { 'X-API-KEY': API_KEY } })
+    if (res?.data?.sent) {
+      alert(`Se enviaron alertas para ${res.data.count} host(s).`)
+    } else {
+      alert('No hay hosts en estado de alerta actualmente.')
+    }
+  } catch (e) {
+    alert('Error enviando alertas manuales: ' + (e?.response?.data?.detail || e.message))
+  }
+}
+
 const getProfileStatus = (host, profileName) => {
   if (!host || !host.profiles_status) return false
   return host.profiles_status[profileName] === true
@@ -171,6 +194,12 @@ const atRiskCount = computed(() => hosts.value.filter(h => !h.firewall_status).l
             Live Updates
           </span>
           <span>Updated {{ updatedSecondsAgo }}s ago</span>
+          <button
+            @click="sendManualAlerts"
+            class="ml-4 px-3 py-1.5 rounded-md bg-indigo-600/80 hover:bg-indigo-500 text-[11px] font-medium text-white shadow-sm shadow-indigo-500/30"
+          >
+            Enviar alertas ahora
+          </button>
         </div>
       </div>
 
@@ -181,6 +210,7 @@ const atRiskCount = computed(() => hosts.value.filter(h => !h.firewall_status).l
               <th class="px-6 py-4">Hostname</th>
               <th class="px-6 py-4">IP Address</th>
               <th class="px-6 py-4">Overall Status</th>
+              <th class="px-6 py-4">Known</th>
               <th class="px-6 py-4">Profiles (Dom/Priv/Pub)</th>
               <th class="px-6 py-4 text-right">Last Heartbeat</th>
               <th class="px-6 py-4 text-right">Actions</th>
@@ -194,6 +224,17 @@ const atRiskCount = computed(() => hosts.value.filter(h => !h.firewall_status).l
               <td class="px-6 py-4 font-medium text-white group-hover:text-indigo-300 transition-colors">{{ host.hostname }}</td>
               <td class="px-6 py-4 text-gray-400 font-mono text-sm">{{ host.ip_address }}</td>
               <td class="px-6 py-4"><StatusBadge :status="host.firewall_status" /></td>
+              <td class="px-6 py-4">
+                <button
+                  @click="toggleKnown(host)"
+                  class="text-xs px-2 py-1 rounded-full border transition-colors"
+                  :class="host.is_acknowledged
+                    ? 'border-emerald-500/60 text-emerald-300 bg-emerald-500/10'
+                    : 'border-gray-600 text-gray-300 hover:border-indigo-500 hover:text-indigo-300'"
+                >
+                  {{ host.is_acknowledged ? 'Conocido' : 'Marcar conocido' }}
+                </button>
+              </td>
               <td class="px-6 py-4">
                 <div class="flex items-center gap-2">
                   <StatusBadge type="profile" text="Dom" :status="getProfileStatus(host, 'Domain')" />
