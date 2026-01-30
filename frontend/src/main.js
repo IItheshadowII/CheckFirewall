@@ -3,13 +3,16 @@ import './style.css'
 import App from './App.vue'
 import axios from 'axios'
 
-// Configure axios base URL only from Vite env. Do NOT provide a
-// hardcoded fallback here; if `VITE_API_URL` is missing requests
-// remain relative and must be handled by the hosting environment.
-if (import.meta.env.VITE_API_URL) {
-	axios.defaults.baseURL = import.meta.env.VITE_API_URL
-} else {
-	console.warn('VITE_API_URL not set; axios will use relative URLs')
+// Configure axios base URL from Vite env when present. If it is not
+// defined (for example when the hosting platform does not inject
+// build-time env vars), fall back to using the same host but port
+// 8000, assuming the backend is exposed there.
+let apiUrl = import.meta.env.VITE_API_URL
+if (!apiUrl) {
+	const { protocol, hostname } = window.location
+	apiUrl = `${protocol}//${hostname}:8000`
+	console.warn('VITE_API_URL not set; falling back to', apiUrl)
 }
+axios.defaults.baseURL = apiUrl
 
 createApp(App).mount('#app')

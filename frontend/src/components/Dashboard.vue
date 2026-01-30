@@ -10,8 +10,13 @@ const updatedSecondsAgo = ref(0)
 let refreshInterval = null
 let timerInterval = null
 
-// Read backend base from Vite env only. No hardcoded fallback.
-const API_URL = import.meta.env.VITE_API_URL || ''
+// Backend base URL: prefer Vite env, otherwise derive from current
+// host assuming backend listens on port 8000.
+let API_URL = import.meta.env.VITE_API_URL || ''
+if (!API_URL) {
+  const { protocol, hostname } = window.location
+  API_URL = `${protocol}//${hostname}:8000`
+}
 
 const fetchHosts = async () => {
   try {
