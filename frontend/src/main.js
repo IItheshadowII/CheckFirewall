@@ -3,9 +3,13 @@ import './style.css'
 import App from './App.vue'
 import axios from 'axios'
 
-// Backend base URL: use env if present, otherwise fall back to the
-// EasyPanel backend URL so the app works even without VITE_API_URL.
-const API_URL = import.meta.env.VITE_API_URL || 'https://monitor-firewallmonitor.koswui.easypanel.host'
-axios.defaults.baseURL = API_URL
+// Configure axios base URL only from Vite env. Do NOT provide a
+// hardcoded fallback here; if `VITE_API_URL` is missing requests
+// remain relative and must be handled by the hosting environment.
+if (import.meta.env.VITE_API_URL) {
+	axios.defaults.baseURL = import.meta.env.VITE_API_URL
+} else {
+	console.warn('VITE_API_URL not set; axios will use relative URLs')
+}
 
 createApp(App).mount('#app')
