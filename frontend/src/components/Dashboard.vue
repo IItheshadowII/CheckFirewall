@@ -4,6 +4,8 @@ import axios from 'axios'
 import { formatDistanceToNow } from 'date-fns'
 import StatusBadge from './StatusBadge.vue'
 
+const runtimeEnv = (typeof window !== 'undefined' && window.__FW_ENV) ? window.__FW_ENV : {}
+
 const hosts = ref([])
 const loading = ref(true)
 const updatedSecondsAgo = ref(0)
@@ -13,16 +15,22 @@ let timerInterval = null
 // Backend base URL: prefer Vite env, otherwise derive from current
 // host assuming backend listens on port 8000.
 let API_URL = import.meta.env.VITE_API_URL || ''
+if (!API_URL && runtimeEnv.VITE_API_URL) {
+  API_URL = runtimeEnv.VITE_API_URL
+}
 if (!API_URL) {
   const { protocol, hostname } = window.location
   API_URL = `${protocol}//${hostname}:8000`
 }
 
-// API key: prefer VITE_API_KEY from env, fall back to default
-const API_KEY = import.meta.env.VITE_API_KEY || 'change-me-please'
+// API key: prefer Vite env (dev), then runtime env (production)
+const API_KEY = import.meta.env.VITE_API_KEY || runtimeEnv.VITE_API_KEY || ''
 
 const fetchHosts = async () => {
   try {
+    if (!API_KEY) {
+      console.warn('VITE_API_KEY not set; requests may be rejected by backend')
+    }
     const res = await axios.get('/api/hosts', { headers: { 'X-API-KEY': API_KEY } })
     hosts.value = res.data || []
     updatedSecondsAgo.value = 0
@@ -136,6 +144,10 @@ const toggleKnown = async (host) => {
 
 const sendManualAlerts = async () => {
   try {
+    if (!API_KEY) {
+      alert('Falta configurar VITE_API_KEY en el frontend (entorno).')
+      return
+    }
     const res = await axios.post('/api/alerts/send', null, { headers: { 'X-API-KEY': API_KEY } })
     if (res?.data?.sent) {
       alert(`Se enviaron alertas para ${res.data.count} host(s).`)
