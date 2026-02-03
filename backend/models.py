@@ -8,11 +8,11 @@ class Host(Base):
     id = Column(Integer, primary_key=True, index=True)
     hostname = Column(String, unique=True, index=True)
     ip_address = Column(String)
-    firewall_status = Column(Boolean)  # True = OK, False = Risk
+    firewall_status = Column(Boolean, nullable=False, default=True)  # True = OK, False = Risk
     profiles_status = Column(JSON)     # Dict of profiles
     last_seen = Column(DateTime, default=datetime.utcnow)
-    is_alerting = Column(Boolean, default=False) # To track if we have already sent an alert for this down state
-    is_acknowledged = Column(Boolean, default=False) # If true, suppress alerts for this host until unacknowledged
+    is_alerting = Column(Boolean, nullable=False, default=False) # To track if we have already sent an alert for this down state
+    is_acknowledged = Column(Boolean, nullable=False, default=False) # If true, suppress alerts for this host until unacknowledged
 
     def __repr__(self):
         return f"<Host(hostname={self.hostname}, status={self.firewall_status})>"

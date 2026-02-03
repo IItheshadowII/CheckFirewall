@@ -4,6 +4,9 @@ import App from './App.vue'
 import axios from 'axios'
 
 const runtimeEnv = (typeof window !== 'undefined' && window.__FW_ENV) ? window.__FW_ENV : {}
+if (typeof window !== 'undefined' && !window.__FW_ENV) {
+	console.warn('Runtime env not loaded (missing /env.js). Check nginx runtime injection.')
+}
 
 // Configure axios base URL from Vite env when present. If it is not
 // defined (for example when the hosting platform does not inject

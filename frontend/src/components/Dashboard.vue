@@ -25,6 +25,9 @@ if (!API_URL) {
 
 // API key: prefer Vite env (dev), then runtime env (production)
 const API_KEY = import.meta.env.VITE_API_KEY || runtimeEnv.VITE_API_KEY || ''
+if (!API_KEY) {
+  console.warn('VITE_API_KEY not set; authenticated requests will fail')
+}
 
 const fetchHosts = async () => {
   try {
@@ -155,7 +158,13 @@ const sendManualAlerts = async () => {
       alert('No hay hosts en estado de alerta actualmente.')
     }
   } catch (e) {
-    alert('Error enviando alertas manuales: ' + (e?.response?.data?.detail || e.message))
+    const status = e?.response?.status
+    const detail = e?.response?.data?.detail || e.message
+    if (status === 403) {
+      alert('Error enviando alertas manuales: credenciales inválidas. Revisá VITE_API_KEY del frontend vs API_KEY del backend.')
+      return
+    }
+    alert('Error enviando alertas manuales: ' + detail)
   }
 }
 

@@ -7,6 +7,7 @@ from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import or_
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import models, schemas, database, config, utils
@@ -61,9 +62,10 @@ async def _collect_alert_hosts(db: AsyncSession, include_already_alerting: bool 
 
     threshold = datetime.utcnow() - timedelta(minutes=config.settings.ALERT_TIMEOUT_MINUTES)
 
-    base_filters = [models.Host.is_acknowledged == False]
+    # Treat NULL booleans as False for backward compatibility with older DBs.
+    base_filters = [or_(models.Host.is_acknowledged.is_(False), models.Host.is_acknowledged.is_(None))]
     if not include_already_alerting:
-        base_filters.append(models.Host.is_alerting == False)
+        base_filters.append(or_(models.Host.is_alerting.is_(False), models.Host.is_alerting.is_(None)))
 
     query_silent = select(models.Host).where(
         models.Host.last_seen < threshold,
@@ -73,7 +75,7 @@ async def _collect_alert_hosts(db: AsyncSession, include_already_alerting: bool 
     silent_hosts = result_silent.scalars().all()
 
     query_risky = select(models.Host).where(
-        models.Host.firewall_status == False,
+        or_(models.Host.firewall_status.is_(False), models.Host.firewall_status.is_(None)),
         *base_filters,
     )
     result_risky = await db.execute(query_risky)
